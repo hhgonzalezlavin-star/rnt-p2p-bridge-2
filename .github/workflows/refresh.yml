@@ -1,0 +1,61 @@
+name: Refresh RNT P2P bridge
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "3,13,23,33,43,53 * * * *"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: rnt-p2p-bridge
+  cancel-in-progress: false
+
+jobs:
+  refresh-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Read RNT P2P market
+        run: python monitor.py --state state/state.json --site site
+
+      - name: Persist event history
+        shell: bash
+        run: |
+          git config user.name "rnt-p2p-bridge-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update RNT P2P monitor state"
+            git push
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
